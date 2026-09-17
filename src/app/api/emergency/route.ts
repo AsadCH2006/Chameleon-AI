@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     let aiAssessment = "";
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.5-flash",
         contents: `System emergency voice trigger "${triggerPhrase}" was spoken. Produce a 1-sentence urgent crisis alert notification suitable for sending to emergency contact ${contactName}. Include a request for immediate check-in.`,
       });
       aiAssessment = response.text || "";
