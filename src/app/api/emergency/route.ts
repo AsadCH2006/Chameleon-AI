@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "",
@@ -10,10 +9,6 @@ const ai = new GoogleGenAI({
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-const resendApiKey = process.env.RESEND_API_KEY;
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const targetEmail = process.env.EMERGENCY_TARGET_EMAIL;
 
 const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
 
@@ -60,7 +55,9 @@ export async function POST(req: Request) {
       aiAssessment = `URGENT CRISIS ALERT: System emergency trigger "${triggerPhrase}" has been activated; please check in with me immediately to verify my safety.`;
     }
 
-    const plainTextMessage = `${aiAssessment.trim()}${finalLocation?.mapUrl ? `\n\nLive Location: ${finalLocation.mapUrl}` : ""}`;
+    const plainTextMessage = `${aiAssessment.trim()}${
+      finalLocation?.mapUrl ? `\n\nLive Location: ${finalLocation.mapUrl}` : ""
+    }`;
 
     // --- 3. DISPATCH VIA DISCORD WEBHOOK ---
     let discordStatus = "skipped";
@@ -79,7 +76,9 @@ export async function POST(req: Request) {
                 {
                   name: "Location Status",
                   value: finalLocation?.mapUrl
-                    ? `[View Google Maps](${finalLocation.mapUrl}) (${finalLocation.isApproximate ? "IP Estimated" : "Exact GPS"})`
+                    ? `[View Google Maps](${finalLocation.mapUrl}) (${
+                        finalLocation.isApproximate ? "IP Estimated" : "Exact GPS"
+                      })`
                     : "Unavailable",
                   inline: false,
                 },
@@ -107,35 +106,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // --- 4. DISPATCH VIA EMAIL (RESEND) ---
-    let emailStatus = "skipped";
-    if (resend && targetEmail) {
-      try {
-        const { error } = await resend.emails.send({
-          from: "Chameleon Alert <onboarding@resend.dev>",
-          to: [targetEmail],
-          subject: `🚨 URGENT CRISIS ALERT: Trigger "${triggerPhrase}" Activated`,
-          html: `
-            <div style="font-family: sans-serif; padding: 20px; background-color: #020617; color: #f8fafc; border-radius: 8px;">
-              <h2 style="color: #f43f5e;">🚨 URGENT STEALTH ALERT DISPATCHED</h2>
-              <p style="font-size: 16px; line-height: 1.5;">${aiAssessment.trim()}</p>
-              ${
-                finalLocation?.mapUrl
-                  ? `<p style="margin-top: 20px;"><strong>📍 Location (${finalLocation.isApproximate ? "IP Estimated" : "Exact GPS"}):</strong> <a style="color: #38bdf8;" href="${finalLocation.mapUrl}">${finalLocation.mapUrl}</a></p>`
-                  : ""
-              }
-              <hr style="border-color: #1e293b; margin-top: 20px;" />
-              <p style="font-size: 12px; color: #64748b;">Trigger Word: "${triggerPhrase}" | Target Contact: ${contactName} (${contactPhone})</p>
-            </div>
-          `,
-        });
-        if (!error) emailStatus = "sent";
-      } catch (e) {
-        console.error("Email Dispatch Error:", e);
-      }
-    }
-
-    // --- 5. LOG TO SUPABASE ---
+    // --- 4. LOG TO SUPABASE ---
     try {
       await supabase.from("emergency_logs").insert([
         {
@@ -145,7 +116,7 @@ export async function POST(req: Request) {
           latitude: finalLocation?.latitude || null,
           longitude: finalLocation?.longitude || null,
           ai_message: plainTextMessage,
-          dispatch_status: `Discord: ${discordStatus} | Email: ${emailStatus}`,
+          dispatch_status: `Discord: ${discordStatus}`,
         },
       ]);
     } catch (dbError: any) {
@@ -155,13 +126,11 @@ export async function POST(req: Request) {
     console.log("-----------------------------------------");
     console.log("🚨 STEALTH ALERT EXECUTED 🚨");
     console.log(`Discord Status: ${discordStatus.toUpperCase()}`);
-    console.log(`Email Status: ${emailStatus.toUpperCase()}`);
     console.log("-----------------------------------------");
 
     return NextResponse.json({
       success: true,
       discordStatus,
-      emailStatus,
       aiMessage: plainTextMessage,
     });
   } catch (error: any) {
